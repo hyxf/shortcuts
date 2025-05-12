@@ -9,12 +9,14 @@ from typing import List, Optional
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".flac", ".wav"}
 
+
 def check_ffmpeg() -> bool:
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         return True
     except (subprocess.SubprocessError, FileNotFoundError):
         return False
+
 
 def list_media_files(directory: str, media_type: str = "all") -> List[str]:
     if media_type == "video":
@@ -29,6 +31,7 @@ def list_media_files(directory: str, media_type: str = "all") -> List[str]:
         for f in os.listdir(directory)
         if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in exts
     ]
+
 
 def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name: Optional[str] = None) -> str:
     if not output_ext.startswith("."):
@@ -45,6 +48,7 @@ def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name:
             return output_path
         index += 1
 
+
 def run_ffmpeg(cmd: List[str]) -> bool:
     print(f"[INFO] Running: {' '.join(cmd)}")
     try:
@@ -55,17 +59,20 @@ def run_ffmpeg(cmd: List[str]) -> bool:
         print(f"[ERROR] ffmpeg failed: {e}", file=sys.stderr)
         return False
 
+
 def print_file_info(input_path: str, output_path: str) -> None:
     if os.path.exists(output_path):
         input_size = os.path.getsize(input_path) / 1024 / 1024
         output_size = os.path.getsize(output_path) / 1024 / 1024
         print(f"[INFO] Size: {input_size:.2f} MB → {output_size:.2f} MB ({output_size - input_size:+.2f} MB)")
 
+
 def convert_video(input_file: str, args) -> None:
     output_path = generate_output_path(input_file, args.ext)
     cmd = ["ffmpeg", "-y", "-i", input_file, "-c:v", args.vcodec, "-c:a", args.acodec, output_path]
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
+
 
 def convert_audio(input_file: str, args) -> None:
     output_path = generate_output_path(input_file, args.ext)
@@ -79,6 +86,7 @@ def convert_audio(input_file: str, args) -> None:
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
 
+
 def download_m3u8(url: str, args) -> None:
     output_dir = args.dir
 
@@ -90,14 +98,20 @@ def download_m3u8(url: str, args) -> None:
 
     output_path = generate_output_path(os.path.join(output_dir, base_name), ".mp4")
     cmd = [
-        "ffmpeg", "-y",
-        "-allowed_extensions", "ALL",
-        "-i", url,
-        "-c:v", args.vcodec,
-        "-c:a", args.acodec,
-        output_path
+        "ffmpeg",
+        "-y",
+        "-allowed_extensions",
+        "ALL",
+        "-i",
+        url,
+        "-c:v",
+        args.vcodec,
+        "-c:a",
+        args.acodec,
+        output_path,
     ]
     run_ffmpeg(cmd)
+
 
 def process_inputs(inputs: List[str], handler, args) -> None:
     for item in inputs:
@@ -106,6 +120,7 @@ def process_inputs(inputs: List[str], handler, args) -> None:
             handler(item, args)
         except Exception as e:
             print(f"[ERROR] Failed to process {item}: {e}", file=sys.stderr)
+
 
 def main():
     if not check_ffmpeg():
@@ -131,7 +146,9 @@ def main():
     m3u8_parser = subparsers.add_parser("m3u8", help="Download m3u8 video stream")
     m3u8_parser.add_argument("url", help="URL of the m3u8 file")
     m3u8_parser.add_argument("--output", help="Output file name without extension")
-    m3u8_parser.add_argument("--dir",default=os.getcwd(), help="Directory to save the output (default is current directory)")
+    m3u8_parser.add_argument(
+        "--dir", default=os.getcwd(), help="Directory to save the output (default is current directory)"
+    )
     m3u8_parser.add_argument("--vcodec", default="copy", help="Video codec")
     m3u8_parser.add_argument("--acodec", default="copy", help="Audio codec")
 
@@ -163,6 +180,7 @@ def main():
             process_inputs(input_files, convert_audio, args)
     elif args.command == "m3u8":
         download_m3u8(args.url, args)
+
 
 if __name__ == "__main__":
     main()
