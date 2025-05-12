@@ -5,9 +5,8 @@ import argparse
 import sys
 from typing import List, Optional
 
-
-SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".mp3", ".m4a", ".aac", ".flac", ".wav", ".webm"}
-
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".flac", ".wav"}
 
 def check_ffmpeg() -> bool:
     try:
@@ -16,14 +15,19 @@ def check_ffmpeg() -> bool:
     except (subprocess.SubprocessError, FileNotFoundError):
         return False
 
+def list_media_files(directory: str, media_type: str = "all") -> List[str]:
+    if media_type == "video":
+        exts = VIDEO_EXTENSIONS
+    elif media_type == "audio":
+        exts = AUDIO_EXTENSIONS
+    else:
+        exts = VIDEO_EXTENSIONS | AUDIO_EXTENSIONS
 
-def list_media_files(directory: str) -> List[str]:
     return [
         os.path.join(directory, f)
         for f in os.listdir(directory)
-        if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS
+        if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in exts
     ]
-
 
 def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name: Optional[str] = None) -> str:
     if not output_ext.startswith("."):
@@ -40,7 +44,6 @@ def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name:
             return output_path
         index += 1
 
-
 def run_ffmpeg(cmd: List[str]) -> bool:
     print(f"[INFO] Running: {' '.join(cmd)}")
     try:
@@ -51,13 +54,11 @@ def run_ffmpeg(cmd: List[str]) -> bool:
         print(f"[ERROR] ffmpeg failed: {e}", file=sys.stderr)
         return False
 
-
 def print_file_info(input_path: str, output_path: str) -> None:
     if os.path.exists(output_path):
         input_size = os.path.getsize(input_path) / 1024 / 1024
         output_size = os.path.getsize(output_path) / 1024 / 1024
         print(f"[INFO] Size: {input_size:.2f} MB → {output_size:.2f} MB ({output_size - input_size:+.2f} MB)")
-
 
 def convert_video(input_file: str, args) -> None:
     output_path = generate_output_path(input_file, args.ext)
@@ -65,22 +66,17 @@ def convert_video(input_file: str, args) -> None:
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
 
-
 def convert_audio(input_file: str, args) -> None:
     output_path = generate_output_path(input_file, args.ext)
     cmd = ["ffmpeg", "-y", "-i", input_file]
-
     if args.extract:
         cmd.append("-vn")
-
     cmd.extend(["-c:a", args.acodec])
     if args.bitrate:
         cmd.extend(["-b:a", args.bitrate])
-
     cmd.append(output_path)
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
-
 
 def process_inputs(inputs: List[str], handler, args) -> None:
     for item in inputs:
@@ -89,7 +85,6 @@ def process_inputs(inputs: List[str], handler, args) -> None:
             handler(item, args)
         except Exception as e:
             print(f"[ERROR] Failed to process {item}: {e}", file=sys.stderr)
-
 
 def main():
     if not check_ffmpeg():
@@ -122,7 +117,8 @@ def main():
     input_files = []
 
     if os.path.isdir(input_path):
-        input_files = list_media_files(input_path)
+        media_type = "video" if args.command == "video" else "audio"
+        input_files = list_media_files(input_path, media_type)
         if not input_files:
             print("[ERROR] No supported media files found in directory.", file=sys.stderr)
             sys.exit(1)
@@ -136,7 +132,6 @@ def main():
         process_inputs(input_files, convert_video, args)
     elif args.command == "audio":
         process_inputs(input_files, convert_audio, args)
-
 
 if __name__ == "__main__":
     main()
