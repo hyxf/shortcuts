@@ -69,7 +69,21 @@ def print_file_info(input_path: str, output_path: str) -> None:
 
 def convert_video(input_file: str, args) -> None:
     output_path = generate_output_path(input_file, args.ext)
-    cmd = ["ffmpeg", "-y", "-i", input_file, "-c:v", args.vcodec, "-c:a", args.acodec, output_path]
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_file,
+        "-c:v",
+        args.vcodec,
+        "-c:a",
+        args.acodec,
+        "-q:a",
+        "0",
+        "-crf",
+        "18",
+        output_path,
+    ]
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
 
@@ -82,6 +96,7 @@ def convert_audio(input_file: str, args) -> None:
     cmd.extend(["-c:a", args.acodec])
     if args.bitrate:
         cmd.extend(["-b:a", args.bitrate])
+    cmd.append(["-q:a", "0"])
     cmd.append(output_path)
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
