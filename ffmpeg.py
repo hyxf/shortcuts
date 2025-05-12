@@ -81,7 +81,9 @@ def convert_video(input_file: str, args) -> None:
         "-q:a",
         "0",
         "-crf",
-        "18",
+        "16",
+        "-preset",
+        "slow",
         output_path,
     ]
     if run_ffmpeg(cmd):
