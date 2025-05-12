@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import os
 import subprocess
 import argparse
@@ -79,7 +80,15 @@ def convert_audio(input_file: str, args) -> None:
         print_file_info(input_file, output_path)
 
 def download_m3u8(url: str, args) -> None:
-    output_path = generate_output_path(url, ".mp4", args.output)
+    output_dir = args.dir
+
+    if args.output:
+        base_name = args.output
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base_name = f"output_{timestamp}"
+
+    output_path = generate_output_path(os.path.join(output_dir, base_name), ".mp4")
     cmd = [
         "ffmpeg", "-y",
         "-allowed_extensions", "ALL",
@@ -122,6 +131,7 @@ def main():
     m3u8_parser = subparsers.add_parser("m3u8", help="Download m3u8 video stream")
     m3u8_parser.add_argument("url", help="URL of the m3u8 file")
     m3u8_parser.add_argument("--output", help="Output file name without extension")
+    m3u8_parser.add_argument("--dir",default=os.getcwd(), help="Directory to save the output (default is current directory)")
     m3u8_parser.add_argument("--vcodec", default="copy", help="Video codec")
     m3u8_parser.add_argument("--acodec", default="copy", help="Audio codec")
 
