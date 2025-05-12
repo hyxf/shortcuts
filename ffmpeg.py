@@ -6,8 +6,10 @@ import sys
 from typing import List, Optional
 
 
+SUPPORTED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".mp3", ".m4a", ".aac", ".flac", ".wav", ".webm"}
+
+
 def check_ffmpeg() -> bool:
-    """Check if ffmpeg is available in the system."""
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         return True
@@ -15,8 +17,15 @@ def check_ffmpeg() -> bool:
         return False
 
 
+def list_media_files(directory: str) -> List[str]:
+    return [
+        os.path.join(directory, f)
+        for f in os.listdir(directory)
+        if os.path.isfile(os.path.join(directory, f)) and os.path.splitext(f)[1].lower() in SUPPORTED_EXTENSIONS
+    ]
+
+
 def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name: Optional[str] = None) -> str:
-    """Generate a unique output file path to avoid overwriting."""
     if not output_ext.startswith("."):
         output_ext = f".{output_ext}"
     input_dir = os.path.dirname(input_path) or "."
@@ -33,109 +42,100 @@ def generate_output_path(input_path: str, output_ext: str = ".mp4", output_name:
 
 
 def run_ffmpeg(cmd: List[str]) -> bool:
-    """Run ffmpeg command."""
-    print(f"[INFO] Running command: {' '.join(cmd)}")
+    print(f"[INFO] Running: {' '.join(cmd)}")
     try:
         subprocess.run(cmd, check=True)
-        print(f"[SUCCESS] Completed: {cmd[-1]}")
+        print(f"[SUCCESS] -> {cmd[-1]}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] ffmpeg command failed: {e}", file=sys.stderr)
+        print(f"[ERROR] ffmpeg failed: {e}", file=sys.stderr)
         return False
 
 
 def print_file_info(input_path: str, output_path: str) -> None:
-    """Print input/output file size information."""
     if os.path.exists(output_path):
         input_size = os.path.getsize(input_path) / 1024 / 1024
         output_size = os.path.getsize(output_path) / 1024 / 1024
-        print(f"[INFO] Input size: {input_size:.2f} MB")
-        print(f"[INFO] Output size: {output_size:.2f} MB")
-        if input_size > 0:
-            change_pct = ((output_size / input_size) - 1) * 100
-            print(f"[INFO] Size change: {output_size - input_size:.2f} MB ({change_pct:.1f}%)")
+        print(f"[INFO] Size: {input_size:.2f} MB → {output_size:.2f} MB ({output_size - input_size:+.2f} MB)")
 
 
-def convert_video(args):
-    output_path = generate_output_path(args.input, args.ext, args.output)
-    cmd = ["ffmpeg", "-y", "-i", args.input, "-c:v", args.vcodec, "-c:a", args.acodec, output_path]
+def convert_video(input_file: str, args) -> None:
+    output_path = generate_output_path(input_file, args.ext)
+    cmd = ["ffmpeg", "-y", "-i", input_file, "-c:v", args.vcodec, "-c:a", args.acodec, output_path]
     if run_ffmpeg(cmd):
-        print(f"[SUCCESS] Video saved to: {output_path}")
-        print_file_info(args.input, output_path)
-        return True
-    return False
+        print_file_info(input_file, output_path)
 
 
-def handle_audio(args):
-    """
-    Convert audio or extract audio from video based on --extract flag.
-    """
-    output_path = generate_output_path(args.input, args.ext, args.output)
-    
-    cmd = ["ffmpeg", "-y", "-i", args.input]
+def convert_audio(input_file: str, args) -> None:
+    output_path = generate_output_path(input_file, args.ext)
+    cmd = ["ffmpeg", "-y", "-i", input_file]
 
     if args.extract:
-        cmd.append("-vn")  # Remove video stream
+        cmd.append("-vn")
 
     cmd.extend(["-c:a", args.acodec])
-
     if args.bitrate:
         cmd.extend(["-b:a", args.bitrate])
-    
-    cmd.append(output_path)
 
+    cmd.append(output_path)
     if run_ffmpeg(cmd):
-        print(f"[SUCCESS] Audio saved to: {output_path}")
-        print_file_info(args.input, output_path)
-        return True
-    return False
+        print_file_info(input_file, output_path)
+
+
+def process_inputs(inputs: List[str], handler, args) -> None:
+    for item in inputs:
+        print(f"\n[PROCESSING] {item}")
+        try:
+            handler(item, args)
+        except Exception as e:
+            print(f"[ERROR] Failed to process {item}: {e}", file=sys.stderr)
 
 
 def main():
     if not check_ffmpeg():
-        print("[ERROR] ffmpeg is not installed or not in PATH", file=sys.stderr)
+        print("[ERROR] ffmpeg is not available.", file=sys.stderr)
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="Media conversion tools using ffmpeg.")
+    parser = argparse.ArgumentParser(description="Media converter using ffmpeg (single or batch)")
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
 
-    # Video command
-    video_parser = subparsers.add_parser("video", help="Convert video")
-    video_parser.add_argument("input", help="Input video file")
-    video_parser.add_argument("--ext", default=".mp4", help="Output file extension")
+    video_parser = subparsers.add_parser("video", help="Convert video file(s)")
+    video_parser.add_argument("input", help="Input file or directory")
+    video_parser.add_argument("--ext", default=".mp4", help="Output extension")
     video_parser.add_argument("--vcodec", default="libx264", help="Video codec")
     video_parser.add_argument("--acodec", default="aac", help="Audio codec")
-    video_parser.add_argument("--output", help="Output filename (without extension)")
 
-    # Unified audio command
-    audio_parser = subparsers.add_parser("audio", help="Convert or extract audio")
-    audio_parser.add_argument("input", help="Input file (audio or video)")
+    audio_parser = subparsers.add_parser("audio", help="Convert or extract audio file(s)")
+    audio_parser.add_argument("input", help="Input file or directory")
     audio_parser.add_argument("--extract", action="store_true", help="Extract audio from video")
-    audio_parser.add_argument("--ext", default=".m4a", help="Output file extension")
+    audio_parser.add_argument("--ext", default=".m4a", help="Output extension")
     audio_parser.add_argument("--acodec", default="aac", help="Audio codec")
     audio_parser.add_argument("--bitrate", help="Audio bitrate")
-    audio_parser.add_argument("--output", help="Output filename (without extension)")
 
     args = parser.parse_args()
 
-    if not getattr(args, "input", None) or not os.path.exists(args.input):
-        print(f"[ERROR] Input file does not exist or not provided: {getattr(args, 'input', '')}", file=sys.stderr)
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    input_path = args.input
+    input_files = []
+
+    if os.path.isdir(input_path):
+        input_files = list_media_files(input_path)
+        if not input_files:
+            print("[ERROR] No supported media files found in directory.", file=sys.stderr)
+            sys.exit(1)
+    elif os.path.isfile(input_path):
+        input_files = [input_path]
+    else:
+        print(f"[ERROR] Invalid input: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        if args.command == "video":
-            success = convert_video(args)
-        elif args.command == "audio":
-            success = handle_audio(args)
-        else:
-            parser.print_help()
-            sys.exit(0)
-
-        sys.exit(0 if success else 1)
-
-    except Exception as e:
-        print(f"[FATAL] {e}", file=sys.stderr)
-        sys.exit(1)
+    if args.command == "video":
+        process_inputs(input_files, convert_video, args)
+    elif args.command == "audio":
+        process_inputs(input_files, convert_audio, args)
 
 
 if __name__ == "__main__":
