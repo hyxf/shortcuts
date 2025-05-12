@@ -78,6 +78,18 @@ def convert_audio(input_file: str, args) -> None:
     if run_ffmpeg(cmd):
         print_file_info(input_file, output_path)
 
+def download_m3u8(url: str, args) -> None:
+    output_path = generate_output_path(url, ".mp4", args.output)
+    cmd = [
+        "ffmpeg", "-y",
+        "-allowed_extensions", "ALL",
+        "-i", url,
+        "-c:v", args.vcodec,
+        "-c:a", args.acodec,
+        output_path
+    ]
+    run_ffmpeg(cmd)
+
 def process_inputs(inputs: List[str], handler, args) -> None:
     for item in inputs:
         print(f"\n[PROCESSING] {item}")
@@ -107,31 +119,40 @@ def main():
     audio_parser.add_argument("--acodec", default="aac", help="Audio codec")
     audio_parser.add_argument("--bitrate", help="Audio bitrate")
 
+    m3u8_parser = subparsers.add_parser("m3u8", help="Download m3u8 video stream")
+    m3u8_parser.add_argument("url", help="URL of the m3u8 file")
+    m3u8_parser.add_argument("--output", help="Output file name without extension")
+    m3u8_parser.add_argument("--vcodec", default="copy", help="Video codec")
+    m3u8_parser.add_argument("--acodec", default="copy", help="Audio codec")
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(0)
 
-    input_path = args.input
-    input_files = []
+    if args.command == "video" or args.command == "audio":
+        input_path = args.input
+        input_files = []
 
-    if os.path.isdir(input_path):
-        media_type = "video" if args.command == "video" else "audio"
-        input_files = list_media_files(input_path, media_type)
-        if not input_files:
-            print("[ERROR] No supported media files found in directory.", file=sys.stderr)
+        if os.path.isdir(input_path):
+            media_type = "video" if args.command == "video" else "audio"
+            input_files = list_media_files(input_path, media_type)
+            if not input_files:
+                print("[ERROR] No supported media files found in directory.", file=sys.stderr)
+                sys.exit(1)
+        elif os.path.isfile(input_path):
+            input_files = [input_path]
+        else:
+            print(f"[ERROR] Invalid input: {input_path}", file=sys.stderr)
             sys.exit(1)
-    elif os.path.isfile(input_path):
-        input_files = [input_path]
-    else:
-        print(f"[ERROR] Invalid input: {input_path}", file=sys.stderr)
-        sys.exit(1)
 
-    if args.command == "video":
-        process_inputs(input_files, convert_video, args)
-    elif args.command == "audio":
-        process_inputs(input_files, convert_audio, args)
+        if args.command == "video":
+            process_inputs(input_files, convert_video, args)
+        elif args.command == "audio":
+            process_inputs(input_files, convert_audio, args)
+    elif args.command == "m3u8":
+        download_m3u8(args.url, args)
 
 if __name__ == "__main__":
     main()
